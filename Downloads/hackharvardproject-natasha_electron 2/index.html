@@ -28,7 +28,7 @@
     display:flex;
     overflow:hidden;
   }
-
+ 
   /* Glass sidebar becomes “transparent against the back” */
   .sidebar{
     width:280px;
@@ -231,7 +231,7 @@
   <aside class="sidebar">
     <h2>Chats</h2>
     <div class="chat-list scroll">
-      <div class="chat-item">New conversation</div>
+      <div class="chat-item">Email reciept to Karen</div>
     </div>
   </aside>
 
@@ -308,9 +308,9 @@
   (function(){
     const h=new Date().getHours();
     const g=document.getElementById('greeting');
-    g.textContent = h<12 ? 'Good morning — tap the orb and speak'
-              : h<18 ? 'Good afternoon — tap the orb and speak'
-                      : 'Good evening — tap the orb and speak';
+    g.textContent = h<12 ? 'Good morning! What can I help with today?'
+              : h<18 ? 'Good afternoon — What can I help with today?'
+                      : 'Good evening — What can I help with today?';
   })();
 
   // === Speech Recognition ===
@@ -383,7 +383,7 @@
       return `Today is ${d}.`;
     }
     if(cmd.includes('weather')){
-      return "I can open your weather app, or tell me a city and I’ll check next.";
+      return "I can open your weather app, or tell me a city and I’ll check.";
     }
     if(cmd.startsWith('open email')) return "Opening your email.";
     return null;
