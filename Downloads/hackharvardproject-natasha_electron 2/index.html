@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Aria – Voice Assistant (Orb UI)</title>
+<style>
+  :root{
+    --bg1:#0b0b12;
+    --glass: rgba(255,255,255,0.08);
+    --glass-border: rgba(255,255,255,0.18);
+    --text: #e9ecff;
+    --muted: #bfc6ff;
+    --accent1:#7dd3fc;   /* cyan */
+    --accent2:#8b5cf6;   /* purple */
+    --accent3:#facc15;   /* yellow */
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+
+  body{
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+    color:var(--text);
+    background: radial-gradient(1200px 600px at 70% 10%, #122233 0%, #0c0f18 50%, #07080f 100%) fixed,
+                radial-gradient(500px 500px at 20% 80%, rgba(125,211,252,.12), transparent 60%) fixed,
+                var(--bg1);
+    min-height:100vh;
+    display:flex;
+    overflow:hidden;
+  }
+
+  /* Glass sidebar becomes “transparent against the back” */
+  .sidebar{
+    width:280px;
+    backdrop-filter: blur(10px);
+    background: var(--glass);
+    border:1px solid var(--glass-border);
+    margin:16px;
+    border-radius:16px;
+    padding:18px 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.25) inset, 0 20px 60px rgba(0,0,0,.25);
+    z-index:5;
+  }
+  .sidebar h2{
+    font-size:14px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:12px;
+  }
+  .chat-list{max-height:calc(100vh - 120px); overflow:auto}
+  .chat-item{
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.14);
+    border-radius:12px;
+    padding:10px 12px;
+    margin-bottom:10px;
+    cursor:pointer;
+    transition:.2s transform, .2s background, .2s border-color;
+  }
+  .chat-item:hover{ transform:translateY(-2px); background:rgba(255,255,255,0.10); border-color:rgba(255,255,255,0.22)}
+  .chat-item::before{content:"💬 "; opacity:.9}
+
+  /* Main area */
+  .main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+    padding:28px 28px 40px 8px;
+    overflow:hidden; /* we’ll manage internal scrolls */
+  }
+
+  .topbar{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .brand{
+    font-weight:700; font-size:48px;
+    background: linear-gradient(90deg, #fff, #d6e0ff);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    letter-spacing:.02em;
+  }
+  .greet{ color:var(--muted); opacity:.9 }
+
+  /* === ORB BUTTON === */
+  .orb-wrap{
+    display:flex; flex-direction:column; align-items:center; gap:18px;
+  }
+
+  .orb{
+    --size: 220px;
+    width:var(--size); height:var(--size);
+    border-radius:50%;
+    position:relative;
+    cursor:pointer;
+    outline:none; border:none; background:transparent;
+    filter: drop-shadow(0 40px 80px rgba(0,0,0,.45));
+    animation: float 6s ease-in-out infinite;
+  }
+  @keyframes float{
+    0%,100%{ transform: translateY(0) }
+    50%    { transform: translateY(-8px) }
+  }
+  /* Aura */
+  .orb::before{
+    content:"";
+    position:absolute; inset:-26%;
+    border-radius:50%;
+    background:
+      radial-gradient(55% 55% at 50% 50%, rgba(255,255,255,.22), rgba(255,255,255,0) 70%),
+      radial-gradient(70% 70% at 30% 30%, rgba(250,204,21,.35), transparent 70%),
+      radial-gradient(85% 85% at 70% 70%, rgba(125, 211, 252,.35), transparent 70%),
+      radial-gradient(80% 80% at 50% 80%, rgba(139,92,246,.28), transparent 70%);
+    filter: blur(18px);
+    z-index:0;
+    transition: opacity .25s;
+    opacity:.95;
+    pointer-events:none;
+  }
+  /* Core */
+  .orb::after{
+    content:"";
+    position:absolute; inset:0;
+    border-radius:50%;
+    background:
+      radial-gradient(circle at 50% 42%, #ffffff, #f8fafc 60%, #e9eefc 100%);
+    z-index:1;
+  }
+  .orb:hover{ transform: translateY(-4px) scale(1.02); }
+  .orb:active{ transform: translateY(0) scale(.98); }
+
+  /* Listening pulse */
+  .orb.listening{
+    animation: float 3.8s ease-in-out infinite;
+  }
+  .orb.listening::before{
+    animation: aura 1.4s ease-in-out infinite;
+  }
+  @keyframes aura{
+    0%,100%{ filter: blur(18px) brightness(1); }
+    50%    { filter: blur(24px) brightness(1.25); }
+  }
+
+  .hint{ color:var(--muted); opacity:.9 }
+
+  /* === Transcript panel in-flow (not overlay) === */
+  .panel{
+    max-width:900px; width:100%;
+    margin:0 auto;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .card{
+    background: var(--glass);
+    border:1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+    border-radius:14px;
+    padding:14px 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.25) inset, 0 6px 25px rgba(0,0,0,.15);
+  }
+  .card-title{
+    font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--muted);
+  }
+
+  .transcript{
+    max-height:0;
+    overflow:hidden;
+    transition:max-height .3s ease;
+  }
+  .transcript.show{
+    max-height:220px; /* expands under the orb */
+  }
+  .transcript-text{
+    font-size:16px; line-height:1.55; color:#eef1ff; opacity:.95;
+    white-space:pre-wrap;
+  }
+
+  /* Quick actions row (glass chips) */
+  .actions{
+    display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
+  }
+  .chip{
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.16);
+    padding:10px 14px; border-radius:999px; color:#f0f3ff;
+    cursor:pointer; transition:.2s;
+  }
+  .chip:hover{ transform: translateY(-2px); background:rgba(255,255,255,.1) }
+
+  /* Audio bottom sheet pushing layout */
+  .audio-player{
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:0; width:min(780px, 96%);
+    background: rgba(18,20,35,.82);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.16);
+    border-top-left-radius:16px; border-top-right-radius:16px;
+    padding:14px 16px; display:none; align-items:center; gap:12px; z-index:20;
+    color:#f5f7ff;
+  }
+  .audio-player.active{ display:flex; }
+  .audio-icon{
+    width:40px; height:40px; border-radius:50%;
+    background: radial-gradient(circle at 30% 30%, var(--accent2), var(--accent1));
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+  }
+  .audio-icon svg{ width:18px; height:18px; fill:white }
+  .audio-info{ flex:1; min-width:0 }
+  .audio-label{ font-size:12px; color:#cdd6ff; letter-spacing:.08em; text-transform:uppercase }
+  .audio-text{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+  /* Reserve space while audio sheet is visible */
+  body.has-audio .main{ padding-bottom:220px; }
+
+  /* Wave dots */
+  .wave{ display:flex; gap:3px; align-items:center }
+  .dot{ width:4px; height:4px; background:#8ea2ff; border-radius:50%;
+        animation: w 1.2s ease-in-out infinite }
+  .dot:nth-child(2){ animation-delay:.2s } .dot:nth-child(3){ animation-delay:.4s }
+  @keyframes w{ 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(2.2)} }
+
+  /* Status line */
+  .status{ text-align:center; color:#cbd5ff; opacity:.9; font-size:14px }
+
+  /* Scroll containers */
+  .scroll{ overflow:auto }
+</style>
+</head>
+<body>
+  <!-- Glass Sidebar -->
+  <aside class="sidebar">
+    <h2>Chats</h2>
+    <div class="chat-list scroll">
+      <div class="chat-item">New conversation</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1 class="brand">Aria</h1>
+    </div>
+
+    <!-- ORB microphone -->
+    <section class="orb-wrap">
+      <button class="orb" id="micOrb" aria-label="Hold to speak"></button>
+      <div class="hint" id="greeting">Tap the orb and speak</div>
+      <div class="status" id="status">Idle</div>
+    </section>
+
+    <!-- Transcript & Actions (in-flow, not overlayed) -->
+    <section class="panel">
+      <div class="card transcript" id="transcriptCard">
+        <div class="card-title" style="margin-bottom:6px;">Transcript</div>
+        <div class="transcript-text" id="transcriptText">Your speech will appear here…</div>
+      </div>
+
+      <div class="actions">
+        <button class="chip" onclick="quickCommand('Open email')">📧 Open Email</button>
+        <button class="chip" onclick="quickCommand('What time is it')">🕐 Time</button>
+        <button class="chip" onclick="quickCommand('Open calendar')">📅 Calendar</button>
+        <button class="chip" onclick="quickCommand('Check weather')">🌤️ Weather</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Audio Bottom Sheet -->
+  <div class="audio-player" id="audioPlayer">
+    <div class="audio-icon" id="playPause">
+      <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="pauseIcon" viewBox="0 0 24 24" style="display:none"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+    </div>
+    <div class="audio-info">
+      <div class="audio-label">Aria is speaking</div>
+      <div class="audio-text" id="audioText">Response audio</div>
+    </div>
+    <div class="wave" id="waveDots" style="display:none">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+    <button class="chip" id="closeAudio">✕ Close</button>
+  </div>
+
+  <audio id="ariaAudio" style="display:none"></audio>
+
+<script>
+  // ===== Elements
+  const micOrb = document.getElementById('micOrb');
+  const statusLine = document.getElementById('status');
+  const transcriptCard = document.getElementById('transcriptCard');
+  const transcriptText = document.getElementById('transcriptText');
+
+  const audioPlayer = document.getElementById('audioPlayer');
+  const ariaAudio   = document.getElementById('ariaAudio');
+  const playPause   = document.getElementById('playPause');
+  const playIcon    = document.getElementById('playIcon');
+  const pauseIcon   = document.getElementById('pauseIcon');
+  const audioText   = document.getElementById('audioText');
+  const waveDots    = document.getElementById('waveDots');
+  const closeAudio  = document.getElementById('closeAudio');
+
+  let isListening=false, recognition=null, finalText='';
+
+  // 🔐 API KEYS (replace locally)
+  const ELEVENLABS_API_KEY='87113c56794f1815134a3bbe28508ef40d5905876928db6a1f86934617619553';
+  const VOICE_ID='EXAVITQu4vr4xnSDxMaL';
+  const GEMINI_API_KEY='AIzaSyAnZbBf1Fmk3Ij2kSCHU-EwmvP-ThlrvUQ';
+
+  // Greeting by time
+  (function(){
+    const h=new Date().getHours();
+    const g=document.getElementById('greeting');
+    g.textContent = h<12 ? 'Good morning — tap the orb and speak'
+              : h<18 ? 'Good afternoon — tap the orb and speak'
+                      : 'Good evening — tap the orb and speak';
+  })();
+
+  // === Speech Recognition ===
+  if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
+    const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.continuous=false;
+    recognition.interimResults=true;
+    recognition.lang='en-US';
+
+    recognition.onstart = () => {
+      statusLine.textContent='Listening…';
+      micOrb.classList.add('listening');
+      finalText='';
+      // Expand transcript panel (pushes layout down, not overlay)
+      transcriptCard.classList.add('show');
+      transcriptText.textContent='Listening…';
+    };
+    recognition.onresult = (e)=>{
+      let inter='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        const t=e.results[i][0].transcript;
+        if(e.results[i].isFinal){ finalText += t + ' '; }
+        else{ inter += t; }
+      }
+      transcriptText.textContent = (finalText+inter).trim();
+    };
+    recognition.onerror = ()=> stopListening();
+    recognition.onend = ()=> { if(isListening) stopListening(); };
+  }
+
+  function startListening(){
+    if(isListening) return;
+    isListening=true;
+    statusLine.textContent='Listening…';
+    try{ recognition && recognition.start(); }catch(_){}
+  }
+  function stopListening(){
+    isListening=false;
+    statusLine.textContent='Processing…';
+    micOrb.classList.remove('listening');
+    try{ recognition && recognition.stop(); }catch(_){}
+    const text= (finalText||'').trim();
+    if(text){
+      sendToBackend(text);
+    }else{
+      statusLine.textContent='No speech detected. Try again.';
+    }
+  }
+
+  micOrb.addEventListener('mousedown', startListening);
+  micOrb.addEventListener('touchstart', (e)=>{ e.preventDefault(); startListening(); }, {passive:false});
+  // Single tap toggles (desktop/mobile)
+  micOrb.addEventListener('click', ()=> { if(isListening) stopListening(); else startListening(); });
+
+  // === Commands / LLM ===
+  async function sendToBackend(utterance){
+    const local = handleLocal(utterance.toLowerCase());
+    const reply = local ?? await askGemini(utterance);
+    await speak(reply);
+  }
+
+  function handleLocal(cmd){
+    if(cmd.includes('time')){
+      const t=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+      return `It's ${t}.`;
+    }
+    if(cmd.includes('date')||cmd.includes('day')){
+      const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+      return `Today is ${d}.`;
+    }
+    if(cmd.includes('weather')){
+      return "I can open your weather app, or tell me a city and I’ll check next.";
+    }
+    if(cmd.startsWith('open email')) return "Opening your email.";
+    return null;
+  }
+
+  async function askGemini(msg){
+    try{
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          contents:[{parts:[{text:`You are Aria, a warm concise voice assistant (1–3 sentences).
+User: ${msg}
+Assistant:`}]}],
+          generationConfig:{temperature:0.7, maxOutputTokens:200}
+        })
+      });
+      if(!res.ok) throw new Error('Gemini error');
+      const data=await res.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here.";
+    }catch{
+      return "I'm having trouble connecting right now.";
+    }
+  }
+
+  async function speak(text){
+    audioText.textContent=text;
+    try{
+      const res=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,{
+        method:'POST',
+        headers:{
+          'Accept':'audio/mpeg',
+          'Content-Type':'application/json',
+          'xi-api-key': ELEVENLABS_API_KEY
+        },
+        body:JSON.stringify({ text, model_id:'eleven_monolingual_v1',
+          voice_settings:{ stability:0.5, similarity_boost:0.75 }})
+      });
+      if(!res.ok) throw new Error('TTS error');
+      const blob=await res.blob();
+      const url=URL.createObjectURL(blob);
+      playAudio(url);
+    }catch(e){
+      statusLine.textContent='Voice error.';
+      // keep transcript open; still release UI states below
+    }finally{
+      // reset “processing” status once audio starts or fails
+    }
+  }
+
+  function playAudio(src){
+    ariaAudio.src=src;
+    audioPlayer.classList.add('active');       // reveal bottom sheet
+    document.body.classList.add('has-audio');  // push layout up
+    waveDots.style.display='flex';
+    playIcon.style.display='none';
+    pauseIcon.style.display='block';
+    statusLine.textContent='Playing response…';
+    ariaAudio.play();
+  }
+
+  // audio controls
+  playPause.addEventListener('click',()=>{
+    if(ariaAudio.paused){
+      ariaAudio.play(); playIcon.style.display='none'; pauseIcon.style.display='block'; waveDots.style.display='flex';
+    }else{
+      ariaAudio.pause(); playIcon.style.display='block'; pauseIcon.style.display='none'; waveDots.style.display='none';
+    }
+  });
+  ariaAudio.addEventListener('ended', hidePlayer);
+  closeAudio.addEventListener('click', hidePlayer);
+  function hidePlayer(){
+    ariaAudio.pause();
+    audioPlayer.classList.remove('active');
+    document.body.classList.remove('has-audio');
+    waveDots.style.display='none';
+    playIcon.style.display='block';
+    pauseIcon.style.display='none';
+    statusLine.textContent='Idle';
+  }
+
+  // Quick chips
+  async function quickCommand(cmd){
+    transcriptCard.classList.add('show');
+    transcriptText.textContent = cmd;
+    statusLine.textContent='Processing…';
+    await sendToBackend(cmd);
+  }
+  window.quickCommand = quickCommand;
+</script>
+</body>
+</html>
